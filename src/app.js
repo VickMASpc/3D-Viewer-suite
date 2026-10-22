@@ -149,7 +149,15 @@ function freeSlot(key){
   if(old.mixer)old.mixer.stopAllAction();
   if(old.overlayCache){for(const m of old.overlayCache.values())m.dispose();old.overlayCache.clear();}
   scenes[key].scene.remove(old.wrapper);
-  old.wrapper.traverse(o=>{if(o.isMesh){o.geometry?.dispose();const mats=[...(o.userData.liveMaterials||[]),...(o.userData.resetMaterials||[])];mats.forEach(m=>m.dispose());}});
+  const geometries=new Set(),textures=new Set(),materials=new Set();
+  old.wrapper.traverse(o=>{if(!o.isMesh)return;
+    if(o.geometry)geometries.add(o.geometry);
+    for(const m of [...(o.userData.liveMaterials||[]),...(o.userData.resetMaterials||[])]){
+      if(!m)continue;materials.add(m);
+      for(const prop of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','alphaMap','bumpMap','specularMap'])if(m[prop])textures.add(m[prop]);
+    }
+  });
+  geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());
   if(selected && selectedSlot===key)clearSelection();
   slots[key]=null;
 }
@@ -560,9 +568,9 @@ function bindUI(){
   $('btn-open').onclick=$('load-a').onclick=()=>$('model-file').click();
   $('btn-compare-open').onclick=$('load-b').onclick=()=>$('compare-file').click();
   $('btn-folder').onclick=()=>$('folder-file').click();
-  $('model-file').onchange=e=>{loadFiles(e.target.files,'A');e.target.value='';};
-  $('compare-file').onchange=e=>{loadFiles(e.target.files,'B');e.target.value='';};
-  $('folder-file').onchange=e=>{loadFiles(e.target.files,treeSlot);e.target.value='';};
+  $('model-file').onchange=e=>{const files=[...e.target.files];e.target.value='';if(files.length)loadFiles(files,'A');};
+  $('compare-file').onchange=e=>{const files=[...e.target.files];e.target.value='';if(files.length)loadFiles(files,'B');};
+  $('folder-file').onchange=e=>{const files=[...e.target.files];e.target.value='';if(files.length)loadFiles(files,treeSlot);};
   $('btn-url').onclick=()=>withLoading('Loading model URL…',()=>loadURL($('url-input').value.trim(),'A'));
   $('btn-compare-url').onclick=()=>withLoading('Loading revision URL…',()=>loadURL($('compare-url').value.trim(),'B'));
   $('url-input').addEventListener('keydown',e=>{if(e.key==='Enter')$('btn-url').click();});
