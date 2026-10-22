@@ -51,7 +51,28 @@ try{
   await page.locator('#compare-mode').selectOption('overlay');
   await page.waitForTimeout(900);
 
+
+  // Test a real GLB generated in-browser with Three's exporter.
+  const glb=await page.evaluate(async()=>{
+    const T=await import('three');
+    const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');
+    const mesh=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshStandardMaterial({color:0x45bbef}));
+    return await new Promise((resolve,reject)=>new GLTFExporter().parse(mesh,result=>resolve(Array.from(new Uint8Array(result))),reject,{binary:true}));
+  });
+  await page.locator('#compare-file').setInputFiles([{name:'smoke-revision.glb',mimeType:'model/gltf-binary',buffer:Buffer.from(glb)}]);
+  await page.waitForFunction(()=>document.querySelector('#metric-faces')?.textContent.trim()==='12'&&document.querySelector('#metrics-slot')?.textContent==='B',{timeout:15000});
+  assert.equal((await page.locator('#metric-faces').innerText()).trim(),'12','GLB cube must have 12 triangles');
+  
+  // Test ZIP model-pack import.
+  const zipped=await page.evaluate(async()=>{
+    const {zipSync,strToU8}=await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
+    return Array.from(zipSync({'pack/zipped.obj':strToU8('o ZipTest\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n')}));
+  });
+  await page.locator('#model-file').setInputFiles([{name:'packed.zip',mimeType:'application/zip',buffer:Buffer.from(zipped)}]);
+  await page.waitForFunction(()=>document.querySelector('#project-name')?.textContent==='zipped.obj',{timeout:15000});
+  assert.equal((await page.locator('#metric-faces').innerText()).trim(),'1','ZIP model must contain one triangle');
+
   assert.equal(errors.length,0,'No browser script exceptions: '+errors.join(' // '));
   writeFileSync('smoke-preview.png',await canvas.screenshot());
-  console.log('PASS: demo WebGL, camera pan/orbit, OBJ import into A/B, split/overlay, orthographic, shading and screenshot.');
+  console.log('PASS: WebGL, left-pan/right-orbit, OBJ/GLB/ZIP imports, split/overlay, orthographic and shading.');
 }finally{await browser.close();}
