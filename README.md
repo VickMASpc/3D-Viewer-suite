@@ -9,8 +9,10 @@ A local-first Three.js workbench for inspecting and comparing repeated 3D model 
 | Input | Action |
 |---|---|
 | **Left mouse drag** | **Pan camera** (up, down, left, right) |
-| **Right mouse drag** | **Orbit model** (yaw and pitch) |
-| Mouse wheel | Zoom |
+| **Right mouse drag** | **Vertical camera tilt ONLY** (pitch; horizontal movement is ignored) |
+| **Two-finger touchpad swipe** | **Orbit yaw + pitch** (horizontal and vertical swipes) |
+| **Touchpad pinch** | Zoom |
+| **Mouse wheel** | Zoom (choose Mouse input if Auto guesses incorrectly) |
 | Left-click, without dragging | Pick object or mesh |
 | Shift + left-click | Measure surface points |
 | F | Frame selected object (or all) |
@@ -20,6 +22,8 @@ A local-first Three.js workbench for inspecting and comparing repeated 3D model 
 | M | Toggle measurement tool |
 | H | Toggle selected visibility |
 | Esc | Clear selection |
+
+Press/dragging the touchpad primary button and holding the mouse left button both pan; browsers cannot reliably distinguish those two primary clicks. In Chrome on Windows, two-finger scrolling typically arrives as wheel events rather than touch pointers. The **INPUT** selector in the toolbar offers **Auto / Touchpad / Mouse** because the browser does not expose a guaranteed device type for wheel events. Two-finger swipe translates to orbit in Touchpad mode; Ctrl+wheel/pinch always zooms. Sensitivity and axis inversion are available under **Inspector → Tools** and persist locally.
 
 Right-click context menus are disabled only over the WebGL viewport. This is *deliberately unlike Blender*.
 
@@ -45,7 +49,7 @@ The original Roxy assets are not bundled with the site; no model data is uploade
 - Session-only material editing: color, metalness, roughness, alpha, emissive strength, double-sided.
 - Two-point world-space measurements reported in **source model units**.
 - Shared-camera side-by-side or opacity-overlaid comparisons.
-- Six canonical viewpoints, perspective/orthographic switch, camera target pan, turntable rotation.
+- Six canonical viewpoints, perspective/orthographic switch, camera target pan, touchpad two-finger orbit, one-axis right-drag tilt, turntable rotation.
 - Named camera bookmarks saved in browser localStorage.
 - PNG screenshots, detailed JSON inspection reports, and portable JSON workspace setup files.
 - Link sharing for URL-loaded models and a saved view. **Local files cannot be embedded in shared links.**
@@ -59,7 +63,9 @@ This is plain static HTML/CSS/JS served directly from the repository root. An Ac
 
 - index.html — interface markup and pinned Three.js import map.
 - style.css — responsive workstation layout.
-- src/app.js — WebGL rendering, loaders, custom mouse controls, picking, analysis and export.
+- src/app.js — WebGL rendering, loaders, custom pointer controls, touchpad gestures, picking, analysis and export.
+- src/camera-input.js — wheel-event classification, normalization, zoom helper (with explicit device override).
+- tests/smoke.mjs — real Chromium checks for camera gestures, mouse wheel/pinch, importing 3D formats and comparing revisions.
 - .github/workflows/pages.yml — static Pages deployment.
 - Dependencies fetched from pinned jsDelivr URLs: Three.js 0.169.0; fflate 0.8.2. A fresh load requires an internet connection.
 
