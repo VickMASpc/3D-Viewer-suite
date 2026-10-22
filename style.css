@@ -12,3 +12,11 @@
 @media(max-width:575px){.workspace{grid-template-columns:1fr}.right-panel{position:absolute;right:0;top:106px;bottom:32px;width:235px;transform:translateX(100%);transition:transform .2s;z-index:10;box-shadow:-10px 0 30px #0008}.right-panel.open{transform:translateX(0)}.viewport-toolbar{height:54px;flex-basis:54px;overflow-x:auto}.toolbar-cluster{flex:0 0 auto}.project-title{display:none}.top-actions{margin-left:auto}.top-btn span{display:none}.view-presets{left:50%;max-width:98%;overflow-x:auto}.toast{right:12px;bottom:45px}.right-panel.open .inspector-head{cursor:pointer}}
 
 .alignment-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:12px 0}.alignment-grid label{font-size:10px;color:#8ba0b8}.alignment-grid input{width:100%;margin-top:5px;padding:6px 4px!important;text-align:center;font-size:11px!important;font-variant-numeric:tabular-nums}
+
+/* Camera input: surface the profile beside projection, not in an obscure settings dialog. */
+.input-picker{display:flex;align-items:center;gap:7px;color:#91a2b9;white-space:nowrap;font-size:10px;letter-spacing:.09em;font-weight:750;border-left:1px solid #334154;padding-left:10px}
+.input-picker select{height:32px;max-width:112px;padding:5px 7px!important;font-size:11px;letter-spacing:normal;font-weight:500}
+.mouse-hints{flex-wrap:wrap;max-width:calc(100% - 168px)}
+.mouse-hints span{white-space:nowrap}
+@media(max-width:1100px){.viewport-toolbar{overflow-x:auto}.toolbar-cluster{flex-shrink:0}.input-picker{padding-left:6px}.mouse-hints span:nth-child(4){display:none}}
+@media(max-width:790px){.mouse-hints span:nth-child(3){display:inline}}
