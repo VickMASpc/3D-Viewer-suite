@@ -36,5 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: parallax-smoke-preview
-          path: smoke-preview.png
+          path: |
+            smoke-preview.png
+            smoke-workspace.png
           if-no-files-found: ignore
