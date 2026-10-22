@@ -107,6 +107,32 @@ function refreshHelpers(){
     if($('show-skeleton').checked){slot.wrapper.traverse(o=>{if(o.isSkinnedMesh){const h=new THREE.SkeletonHelper(o);scene.scene.add(h);scene.skeleton.push(h);}});}
   }
 }
+function applyAlignment(refit=true){
+  const mode=$('alignment-mode').value;
+  const offset=new THREE.Vector3(...['x','y','z'].map(axis=>Number($('offset-b-'+axis).value)||0));
+  for(const key of ['A','B']){
+    const slot=slots[key];if(!slot)continue;
+    const box=slot.box,center=box.getCenter(new THREE.Vector3());
+    const pos=new THREE.Vector3();
+    if(mode==='center')pos.copy(center).negate();
+    else if(mode==='ground')pos.set(-center.x,-box.min.y,-center.z);
+    else pos.set(0,0,0);
+    if(key==='B')pos.add(offset);
+    slot.wrapper.position.copy(pos);slot.wrapper.updateMatrixWorld(true);
+  }
+  if(refit){clearMeasure();refreshHelpers();fit();status('Comparison alignment: '+mode);}
+}
+function updateGizmo(){
+  const labels=q('.axes-gizmo span');
+  const rotation=camera.quaternion.clone().invert();
+  const axes=[new THREE.Vector3(0,1,0),new THREE.Vector3(1,0,0),new THREE.Vector3(0,0,1)];
+  axes.forEach((axis,i)=>{
+    const v=axis.applyQuaternion(rotation),el=labels[i];if(!el)return;
+    el.style.left=(33+v.x*22)+'px';el.style.top=(33-v.y*22)+'px';
+    el.style.right='auto';el.style.bottom='auto';el.style.transform='translate(-50%,-50%)';
+    el.style.opacity=String(.45+.55*((v.z+1)/2));
+  });
+}
 function sceneStats(root){
   let meshes=0,vertices=0,faces=0,nodes=0,uvs=0,skinned=0,maps=0;
   const materials=new Set(),textures=new Set();
@@ -170,7 +196,7 @@ function installModel(obj,key,name,clips=[],remoteUrl=null){
   $('compare-mode').value=comparisonMode;
   if(key==='A'){$('project-name').textContent=name;$('viewport-model-name').textContent=name;$('file-state').textContent='· Loaded in A';}
   $('viewport-slot').textContent=key;
-  treeSlot=key;refreshTreeSwitch();refreshTree();refreshMetrics();refreshAnimations();refreshHelpers();updateVisualModes();fit();
+  treeSlot=key;applyAlignment(false);refreshTreeSwitch();refreshTree();refreshMetrics();refreshAnimations();refreshHelpers();updateVisualModes();fit();
   $('comparison-label').classList.toggle('hidden',comparisonMode!=='split');
   toast(name+' imported into '+key+' · '+fmt(slot.stats.faces)+' triangles');
   status(key+' loaded: '+name);
@@ -527,6 +553,7 @@ function renderFrame(){
     renderOne(slots.A?'A':'B',0,rw,rh);
   }
   renderer.setScissorTest(false);
+  updateGizmo();
   frameCount++;
   const now=performance.now();
   if(now-lastFpsAt>700){
@@ -582,7 +609,7 @@ function bindUI(){
   $('btn-projection').onclick=()=>{cameraState.orthographic=!cameraState.orthographic;setCamera();};
   $('render-mode').onchange=()=>updateVisualModes();
   $('compare-mode').onchange=e=>setComparison(e.target.value);
-  $('btn-swap').onclick=()=>{if(!slots.B){toast('Load B first.');return;}const a=slots.A,b=slots.B;scenes.A.scene.remove(a.wrapper);scenes.B.scene.remove(b.wrapper);slots.A=b;slots.B=a;scenes.A.scene.add(b.wrapper);scenes.B.scene.add(a.wrapper);$('project-name').textContent=b.name;clearSelection();refreshTree();refreshMetrics();refreshHelpers();fit();toast('Swapped original and revision.');};
+  $('btn-swap').onclick=()=>{if(!slots.B){toast('Load B first.');return;}const a=slots.A,b=slots.B;scenes.A.scene.remove(a.wrapper);scenes.B.scene.remove(b.wrapper);slots.A=b;slots.B=a;scenes.A.scene.add(b.wrapper);scenes.B.scene.add(a.wrapper);$('project-name').textContent=b.name;clearSelection();refreshTree();refreshMetrics();applyAlignment(false);refreshHelpers();fit();toast('Swapped original and revision.');};
   q('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));
   q('#tree-slot-switch button').forEach(b=>b.onclick=()=>{treeSlot=b.dataset.slot;refreshTreeSwitch();clearSelection();refreshTree();refreshMetrics();refreshAnimations();});
   q('.tabs button').forEach(b=>b.onclick=()=>{q('.tabs button').forEach(x=>x.classList.toggle('active',x===b));q('.tab-page').forEach(x=>x.classList.toggle('active',x.dataset.page===b.dataset.tab));});
@@ -603,6 +630,8 @@ function bindUI(){
   for(const id of ['show-grid','show-axes','show-bounds','show-skeleton'])$(id).onchange=refreshHelpers;
   $('measure-toggle').onchange=e=>{measureOn=e.target.checked;canvas.style.cursor=measureOn?'crosshair':'grab';};
   $('btn-clear-measure').onclick=clearMeasure;
+  $('alignment-mode').onchange=()=>applyAlignment();
+  for(const axis of ['x','y','z'])$('offset-b-'+axis).onchange=()=>applyAlignment();
   for(const id of ['light-key','light-fill','light-rim','exposure','overlay-opacity'])$(id).oninput=applyLighting;
   for(const [id,p] of [['mat-color','color'],['mat-metal','metalness'],['mat-rough','roughness'],['mat-opacity','opacity'],['mat-emissive','emissiveIntensity']]){
     $(id).addEventListener('input',e=>{
@@ -732,7 +761,7 @@ function useCameraJSON(a){
   setCamera();
 }
 function getSetup(){
-  return {application:'PARALLAX',version:1,camera:getCameraJSON(),modelA:slots.A?.remoteUrl||null,modelB:slots.B?.remoteUrl||null,renderMode,comparisonMode,treeSlot,lighting:{key:+$('light-key').value,ambient:+$('light-fill').value,rim:+$('light-rim').value,exposure:+$('exposure').value},showGrid:$('show-grid').checked,showAxes:$('show-axes').checked,bgColor:$('bg-color').value,overlayOpacity:+$('overlay-opacity').value};
+  return {application:'PARALLAX',version:1,camera:getCameraJSON(),modelA:slots.A?.remoteUrl||null,modelB:slots.B?.remoteUrl||null,renderMode,comparisonMode,treeSlot,lighting:{key:+$('light-key').value,ambient:+$('light-fill').value,rim:+$('light-rim').value,exposure:+$('exposure').value},showGrid:$('show-grid').checked,showAxes:$('show-axes').checked,alignmentMode:$('alignment-mode').value,revisionOffset:['x','y','z'].map(axis=>Number($('offset-b-'+axis).value)||0),bgColor:$('bg-color').value,overlayOpacity:+$('overlay-opacity').value};
 }
 function exportSetup(){download(JSON.stringify(getSetup(),null,2),'parallax-inspection.json');toast('Inspection setup exported.');}
 function exportReport(){
@@ -764,11 +793,13 @@ async function applySetup(obj){
   if(obj.lighting){
     for(const [id,k] of [['light-key','key'],['light-fill','ambient'],['light-rim','rim'],['exposure','exposure']])if(obj.lighting[k]!=null)$(id).value=obj.lighting[k];
   }
+  if(obj.alignmentMode&&['center','ground','origin'].includes(obj.alignmentMode))$('alignment-mode').value=obj.alignmentMode;
+  if(Array.isArray(obj.revisionOffset)&&obj.revisionOffset.length===3)for(const [i,axis] of ['x','y','z'].entries())$('offset-b-'+axis).value=Number(obj.revisionOffset[i])||0;
   if(obj.bgColor)$('bg-color').value=obj.bgColor;
   if(obj.overlayOpacity!=null)$('overlay-opacity').value=obj.overlayOpacity;
   if(typeof obj.showGrid==='boolean')$('show-grid').checked=obj.showGrid;
   if(typeof obj.showAxes==='boolean')$('show-axes').checked=obj.showAxes;
-  applyLighting();refreshHelpers();useCameraJSON(obj.camera);
+  applyLighting();applyAlignment(false);refreshHelpers();useCameraJSON(obj.camera);
 }
 function copyShareLink(){
   const setup=getSetup(),params=new URLSearchParams();
