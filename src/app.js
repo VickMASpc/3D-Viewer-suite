@@ -147,6 +147,7 @@ function prepareModel(obj, name, clips=[],remoteUrl=null){
 function freeSlot(key){
   const old=slots[key];if(!old)return;
   if(old.mixer)old.mixer.stopAllAction();
+  if(old.overlayCache){for(const m of old.overlayCache.values())m.dispose();old.overlayCache.clear();}
   scenes[key].scene.remove(old.wrapper);
   old.wrapper.traverse(o=>{if(o.isMesh){o.geometry?.dispose();const mats=[...(o.userData.liveMaterials||[]),...(o.userData.resetMaterials||[])];mats.forEach(m=>m.dispose());}});
   if(selected && selectedSlot===key)clearSelection();
@@ -388,6 +389,7 @@ function makeUVTexture(){
 const uvMaterial=new THREE.MeshBasicMaterial({map:makeUVTexture(),side:THREE.DoubleSide});
 function updateVisualModes(){
   renderMode=$('render-mode').value;
+  for(const key of ['A','B']){const cache=slots[key]?.overlayCache;if(cache){for(const m of cache.values())m.dispose();cache.clear();}}
   for(const key of ['A','B']){
     const slot=slots[key];if(!slot)continue;
     slot.obj.traverse(o=>{
@@ -473,18 +475,24 @@ function renderOne(key,x,w,h,clearColor=true,overlay=false){
   let saved=null;
   if(overlay){
     saved=[];
+    if(!slot.overlayCache)slot.overlayCache=new Map();
     slot.obj.traverse(o=>{
       if(!o.isMesh)return;
       const m=o.material,mats=Array.isArray(m)?m:[m];
       saved.push([o,m]);
       const opacity=+$('overlay-opacity').value;
-      const temp=mats.map(orig=>{const clone=orig.clone();clone.transparent=true;clone.opacity=opacity;clone.depthWrite=false;clone.side=THREE.DoubleSide;return clone;});
+      const temp=mats.map(orig=>{
+        let clone=slot.overlayCache.get(orig.uuid);
+        if(!clone){clone=orig.clone();clone.transparent=true;clone.depthWrite=false;clone.side=THREE.DoubleSide;slot.overlayCache.set(orig.uuid,clone);}
+        clone.opacity=opacity;
+        return clone;
+      });
       o.material=Array.isArray(m)?temp:temp[0];
     });
     scenes[key].grid.visible=false;
   }
   renderer.render(scenes[key].scene,camera);
-  if(saved){for(const [o,old] of saved){const m=Array.isArray(o.material)?o.material:[o.material];m.forEach(x=>x.dispose());o.material=old;}scenes[key].grid.visible=$('show-grid').checked;}
+  if(saved){for(const [o,old] of saved)o.material=old;scenes[key].grid.visible=$('show-grid').checked;}
 }
 function renderFrame(){
   requestAnimationFrame(renderFrame);
@@ -594,12 +602,14 @@ function bindUI(){
       if(p==='color')m.color?.set(e.target.value);else m[p]=+e.target.value;
       if(p==='opacity')m.transparent=+e.target.value<1;
       m.needsUpdate=true;
+      const cache=slots[selectedSlot]?.overlayCache;if(cache){for(const c of cache.values())c.dispose();cache.clear();}
       if(p!=='color')$(id+'-val').textContent=(+e.target.value).toFixed(2);
     });
   }
   $('mat-double').onchange=e=>{const m=selectedMaterial();if(m){m.side=e.target.checked?THREE.DoubleSide:THREE.FrontSide;m.needsUpdate=true;}};
   $('btn-reset-material').onclick=()=>{
     if(!selected?.isMesh)return;
+    selected.userData.liveMaterials.forEach(m=>m.dispose());
     selected.userData.liveMaterials=selected.userData.resetMaterials.map(m=>m.clone());updateVisualModes();refreshMaterialEditor();toast('Selected material restored.');
   };
   $('btn-bookmark').onclick=saveBookmark;
