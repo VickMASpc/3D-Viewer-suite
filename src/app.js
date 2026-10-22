@@ -9,6 +9,7 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { unzip } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
+import { classifyWheel, wheelPixels, zoomFactor } from './camera-input.js';
 
 const $ = id => document.getElementById(id);
 const q = (sel,root=document) => [...root.querySelectorAll(sel)];
@@ -36,6 +37,24 @@ const cameraState={target:new THREE.Vector3(),yaw:.35,pitch:Math.PI/2.1,distance
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let camera=persp,activeAspect=1,renderMode='material',comparisonMode='single',treeSlot='A',selected=null,selectedSlot='A',selectionBox=null,measureOn=false,measurePoints=[],markers=[],measurementLine=null,lastFrames=0,frameCount=0,lastFpsAt=performance.now(),fps=0;
 const clock=new THREE.Clock();
+const inputSettingsKey='parallax-input-settings-v1';
+let lastWheelSource='mouse',lastWheelAt=0;
+function persistInputs(){
+  const data={mode:$('input-device').value,sensitivity:+$('trackpad-sensitivity').value,invertX:$('invert-trackpad-x').checked,invertY:$('invert-trackpad-y').checked};
+  try{localStorage.setItem(inputSettingsKey,JSON.stringify(data));}catch{}
+  $('trackpad-sensitivity-val').textContent=data.sensitivity.toFixed(4);
+}
+function restoreInputs(){
+  try{
+    const data=JSON.parse(localStorage.getItem(inputSettingsKey)||'{}');
+    if(['auto','touchpad','mouse'].includes(data.mode))$('input-device').value=data.mode;
+    if(Number.isFinite(data.sensitivity))$('trackpad-sensitivity').value=clamp(data.sensitivity,.001,.014);
+    $('invert-trackpad-x').checked=!!data.invertX;
+    $('invert-trackpad-y').checked=!!data.invertY;
+  }catch{}
+  $('trackpad-sensitivity-val').textContent=(+$('trackpad-sensitivity').value).toFixed(4);
+}
+
 const raycaster=new THREE.Raycaster();
 const ndc=new THREE.Vector2();
 const scenes={A:makeScene(),B:makeScene()};
@@ -69,6 +88,11 @@ function setCamera(aspect=activeAspect){
     $('camera-info').textContent='PERSPECTIVE · Y-UP';
   }
   camera.updateProjectionMatrix();
+  // Also expose camera telemetry for deterministic interaction tests and inspector integrations.
+  canvas.dataset.cameraYaw=String(p.yaw);
+  canvas.dataset.cameraPitch=String(p.pitch);
+  canvas.dataset.cameraDistance=String(p.distance);
+  canvas.dataset.cameraTarget=p.target.toArray().join(',');
   $('btn-projection').textContent=p.orthographic?'ORTHOGRAPHIC ▾':'PERSPECTIVE ▾';
 }
 function view(name){
@@ -653,10 +677,36 @@ function bindUI(){
   $('btn-copy-link').onclick=copyShareLink;
   $('btn-export-state').onclick=exportSetup;
   $('btn-import-state').onclick=()=>$('state-file').click();
+  for(const id of ['input-device','trackpad-sensitivity','invert-trackpad-x','invert-trackpad-y']){
+    $(id).addEventListener(id==='trackpad-sensitivity'?'input':'change',()=>{lastWheelSource='mouse';lastWheelAt=0;persistInputs();});
+  }
   $('state-file').onchange=e=>{importSetup(e.target.files?.[0]);e.target.value='';};
   window.addEventListener('keydown',handleKey);
   installControls();
   installDrop();
+}
+function panCamera(dx,dy){
+  setCamera();
+  const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
+  const up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+  const height=canvas.getBoundingClientRect().height;
+  const units=(cameraState.orthographic?cameraState.orthoSize*2:2*cameraState.distance*Math.tan(THREE.MathUtils.degToRad(20)))/Math.max(1,height);
+  cameraState.target.addScaledVector(right,-dx*units).addScaledVector(up,dy*units);
+}
+function tiltCamera(dy){
+  // Right drag is vertical tilt ONLY; horizontal right-drag must do nothing.
+  cameraState.pitch=clamp(cameraState.pitch-dy*.006,.003,Math.PI-.003);
+}
+function orbitFromTouchpad(dx,dy){
+  const sensitivity=+$('trackpad-sensitivity').value;
+  const sx=$('invert-trackpad-x').checked?-1:1,sy=$('invert-trackpad-y').checked?-1:1;
+  cameraState.yaw-=dx*sensitivity*sx;
+  cameraState.pitch=clamp(cameraState.pitch-dy*sensitivity*sy,.003,Math.PI-.003);
+}
+function zoomCamera(delta,pinch=false){
+  const factor=zoomFactor(delta,pinch);
+  if(cameraState.orthographic)cameraState.orthoSize=clamp(cameraState.orthoSize*factor,.00001,1e8);
+  else cameraState.distance=clamp(cameraState.distance*factor,.00001,1e8);
 }
 function installControls(){
   let drag=null;
@@ -670,16 +720,9 @@ function installControls(){
   canvas.addEventListener('pointermove',e=>{
     if(!drag)return;
     const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;drag.moved+=Math.abs(dx)+Math.abs(dy);
-    if(drag.button===0){
-      setCamera();
-      const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
-      const up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
-      const height=canvas.getBoundingClientRect().height;
-      const unit=(cameraState.orthographic?cameraState.orthoSize*2:2*cameraState.distance*Math.tan(THREE.MathUtils.degToRad(20)))/Math.max(1,height);
-      cameraState.target.addScaledVector(right,-dx*unit).addScaledVector(up,dy*unit);
-    }else{
-      cameraState.yaw-=dx*.006;cameraState.pitch=clamp(cameraState.pitch-dy*.006,.003,Math.PI-.003);
-    }
+    if(drag.button===0)panCamera(dx,dy);
+    else if(drag.button===2)tiltCamera(dy);
+    // Middle-drag is intentionally not needed: no hidden Blender-style gesture.
     e.preventDefault();
   });
   const end=e=>{
@@ -693,10 +736,22 @@ function installControls(){
   canvas.addEventListener('pointerup',end);
   canvas.addEventListener('pointercancel',()=>{drag=null;canvas.classList.remove('dragging');});
   canvas.addEventListener('wheel',e=>{
+    // Windows Precision Touchpad two-finger swipes arrive as WheelEvent, not
+    // two touch pointers. Pinches arrive as ctrl+wheel in Chromium.
     e.preventDefault();
-    const factor=Math.exp(clamp(e.deltaY,-200,200)*.00125);
-    if(cameraState.orthographic)cameraState.orthoSize=clamp(cameraState.orthoSize*factor,.00001,1e8);
-    else cameraState.distance=clamp(cameraState.distance*factor,.00001,1e8);
+    const now=performance.now();
+    const source=classifyWheel(e,$('input-device').value,lastWheelSource,lastWheelAt,now);
+    const {x,y}=wheelPixels(e,canvas.getBoundingClientRect().height);
+    if(source==='pinch')zoomCamera(y,true);
+    else if(source==='touchpad'){
+      orbitFromTouchpad(x,y);
+      lastWheelSource='touchpad';lastWheelAt=now;
+    }else{
+      zoomCamera(y);
+      lastWheelSource='mouse';lastWheelAt=now;
+    }
+    const hint=source==='pinch'?'Pinch zoom':source==='touchpad'?'Two-finger orbit':'Mouse wheel zoom';
+    $('input-device').title='Last gesture: '+hint+' · override device profile here if misclassified';
   },{passive:false});
 }
 function installDrop(){
@@ -761,7 +816,7 @@ function useCameraJSON(a){
   setCamera();
 }
 function getSetup(){
-  return {application:'PARALLAX',version:1,camera:getCameraJSON(),modelA:slots.A?.remoteUrl||null,modelB:slots.B?.remoteUrl||null,renderMode,comparisonMode,treeSlot,lighting:{key:+$('light-key').value,ambient:+$('light-fill').value,rim:+$('light-rim').value,exposure:+$('exposure').value},showGrid:$('show-grid').checked,showAxes:$('show-axes').checked,alignmentMode:$('alignment-mode').value,revisionOffset:['x','y','z'].map(axis=>Number($('offset-b-'+axis).value)||0),bgColor:$('bg-color').value,overlayOpacity:+$('overlay-opacity').value};
+  return {application:'PARALLAX',version:1,camera:getCameraJSON(),modelA:slots.A?.remoteUrl||null,modelB:slots.B?.remoteUrl||null,renderMode,comparisonMode,treeSlot,lighting:{key:+$('light-key').value,ambient:+$('light-fill').value,rim:+$('light-rim').value,exposure:+$('exposure').value},showGrid:$('show-grid').checked,showAxes:$('show-axes').checked,input:{mode:$('input-device').value,sensitivity:+$('trackpad-sensitivity').value,invertX:$('invert-trackpad-x').checked,invertY:$('invert-trackpad-y').checked},alignmentMode:$('alignment-mode').value,revisionOffset:['x','y','z'].map(axis=>Number($('offset-b-'+axis).value)||0),bgColor:$('bg-color').value,overlayOpacity:+$('overlay-opacity').value};
 }
 function exportSetup(){download(JSON.stringify(getSetup(),null,2),'parallax-inspection.json');toast('Inspection setup exported.');}
 function exportReport(){
@@ -795,6 +850,13 @@ async function applySetup(obj){
   }
   if(obj.alignmentMode&&['center','ground','origin'].includes(obj.alignmentMode))$('alignment-mode').value=obj.alignmentMode;
   if(Array.isArray(obj.revisionOffset)&&obj.revisionOffset.length===3)for(const [i,axis] of ['x','y','z'].entries())$('offset-b-'+axis).value=Number(obj.revisionOffset[i])||0;
+  if(obj.input){
+    if(['auto','mouse','touchpad'].includes(obj.input.mode))$('input-device').value=obj.input.mode;
+    if(Number.isFinite(obj.input.sensitivity))$('trackpad-sensitivity').value=clamp(obj.input.sensitivity,.001,.014);
+    $('invert-trackpad-x').checked=!!obj.input.invertX;
+    $('invert-trackpad-y').checked=!!obj.input.invertY;
+    persistInputs();
+  }
   if(obj.bgColor)$('bg-color').value=obj.bgColor;
   if(obj.overlayOpacity!=null)$('overlay-opacity').value=obj.overlayOpacity;
   if(typeof obj.showGrid==='boolean')$('show-grid').checked=obj.showGrid;
@@ -822,6 +884,7 @@ function loadFromQuery(){
     if(p.get('view')){try{useCameraJSON(JSON.parse(decodeURIComponent(p.get('view'))));}catch{}}
   });
 }
+restoreInputs();
 bindUI();
 renderBookmarks();
 applyLighting();
