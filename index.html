@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1019">
+<meta name="description" content="A precision 3D model inspection suite for continuous iteration and side-by-side comparisons.">
+<title>PARALLAX — 3D Inspection Suite</title>
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+<script type="module" src="./src/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="branding"><span class="brand-mark">◈</span><div><strong>PARALLAX</strong><small>3D INSPECTION SUITE <span class="edition">/ 01</span></small></div></div>
+    <div class="header-divider"></div>
+    <div class="project-title"><span class="dot"></span><span id="project-name">Inspection workspace</span><span id="file-state" class="muted">· Local session</span></div>
+    <div class="top-actions">
+      <button class="top-btn" id="btn-open" title="Load primary model (O)">＋ <span>Open model</span></button>
+      <button class="top-btn" id="btn-compare-open" title="Load reference/revision into slot B">⇄ <span>Compare file</span></button>
+      <button class="top-btn" id="btn-screenshot" title="Export the visible viewport as PNG">▣ <span>Capture</span></button>
+      <button class="top-btn primary" id="btn-report" title="Export the inspection report">↧ <span>Report</span></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="sidebar left-panel">
+      <section class="sidebar-section workbench-head"><div class="eyebrow">WORKSPACE <span class="muted">/ ASSETS</span></div><h2>Model library</h2><p>Load the original into A, then the edited version into B.</p>
+        <div class="two-btn"><button id="load-a">＋ Original (A)</button><button id="load-b">＋ Revision (B)</button></div>
+        <button class="full-btn" id="btn-folder">▤ &nbsp; Open asset folder</button>
+      </section>
+      <section class="sidebar-section compact"><div class="section-label">LOAD FROM URL</div>
+        <div class="url-row"><input id="url-input" type="url" placeholder="https://…/model.glb" aria-label="Primary model URL"><button id="btn-url" title="Open URL in A">A ↗</button></div>
+        <div class="url-row"><input id="compare-url" type="url" placeholder="https://…/revised.glb" aria-label="Comparison model URL"><button id="btn-compare-url" title="Open URL in B">B ↗</button></div>
+        <div class="helper">Remote servers must permit CORS. Drop local companion textures together with OBJ/GLTF.</div>
+      </section>
+      <section class="sidebar-section scene-panel">
+        <div class="section-label line"><span>SCENE HIERARCHY</span><span id="tree-total" class="count">0</span></div>
+        <div class="slot-switch" id="tree-slot-switch"><button data-slot="A" class="selected">A · ORIGINAL</button><button data-slot="B">B · REVISION</button></div>
+        <div id="mesh-tree" class="mesh-tree"><div class="muted tree-empty">No scene loaded.</div></div>
+      </section>
+      <section class="sidebar-section compact bottom-left">
+        <div class="section-label">SELECTED OBJECT</div><div id="selected-name" class="selected-name">Nothing selected</div>
+        <div class="quad-actions"><button id="btn-focus-selected" title="Frame selected mesh">◎ Focus</button><button id="btn-hide-selected" title="Toggle selected visibility">◉ Hide</button><button id="btn-isolate" title="Show only the selected mesh">⊙ Isolate</button><button id="btn-show-all" title="Restore all visibility">↺ All</button></div>
+        <div id="selected-details" class="details muted">Click a mesh or pick it from the hierarchy.</div>
+      </section>
+    </aside>
+
+    <main class="main-panel">
+      <div class="viewport-toolbar">
+        <div class="toolbar-cluster">
+          <span class="viewport-label"><span class="live-dot"></span> VIEWPORT</span>
+          <div class="divider-v"></div>
+          <button class="icon-button" id="btn-frame" title="Frame entire model (F)">⌗</button>
+          <button class="icon-button" id="btn-reset" title="Reset camera">↺</button>
+          <button class="pill-button" id="btn-projection" title="Perspective / orthographic (P)">PERSPECTIVE ▾</button>
+          <select id="render-mode" class="toolbar-select" aria-label="Render mode"><option value="material">Material</option><option value="clay">Clay</option><option value="normal">Normals</option><option value="wire">Wireframe</option><option value="uv">UV checker</option></select>
+        </div>
+        <div class="toolbar-cluster">
+          <select id="compare-mode" class="toolbar-select" aria-label="Comparison mode"><option value="single">Single view</option><option value="split">A / B split</option><option value="overlay">A / B overlay</option></select>
+          <button class="icon-button" id="btn-swap" title="Swap A and B">⇄</button>
+        </div>
+      </div>
+
+      <div id="viewport" class="viewport">
+        <canvas id="viewport-canvas" aria-label="Interactive 3D viewport"></canvas>
+        <div class="vp-top-left"><div class="vp-slot"><b id="viewport-slot">A</b> <span id="viewport-model-name">Inspection drone · demo</span></div><div id="comparison-label" class="compare-caption hidden">A ORIGINAL <span>◀ ▶</span> B REVISION</div></div>
+        <div class="vp-top-right"><div class="axes-gizmo" aria-hidden="true"><span>Y+</span><span>X+</span><span>Z+</span></div></div>
+        <div id="loading-indicator" class="loading-indicator hidden"><div class="spinner"></div><span id="loading-text">Loading model…</span></div>
+        <div id="drop-overlay" class="drop-overlay hidden"><strong>Drop 3D asset here</strong><span>GLB · GLTF · OBJ · FBX · STL · PLY · DAE</span></div>
+        <div class="view-presets"><button data-view="front" title="Front (1)">FRONT</button><button data-view="back" title="Back (2)">BACK</button><button data-view="left" title="Left (3)">LEFT</button><button data-view="right" title="Right (4)">RIGHT</button><button data-view="top" title="Top (5)">TOP</button><button data-view="bottom" title="Bottom (6)">BOTTOM</button></div>
+        <div class="viewport-bottom">
+          <div class="mouse-hints"><span><b class="mouse-symbol">L</b> Pan</span><span><b class="mouse-symbol">R</b> Orbit</span><span><b class="mouse-symbol">↕</b> Zoom</span><span><b class="mouse-symbol">⇧</b> Measure</span></div>
+          <div class="performance"><span id="fps">-- FPS</span><span id="drawcalls">-- calls</span><span id="triangles">-- tris</span></div>
+        </div>
+      </div>
+      <div class="statusbar"><div><span class="status-led"></span><span id="status-text">Ready · Drop a model or load from your computer.</span></div><div id="camera-info">PERSPECTIVE · Y-UP</div></div>
+    </main>
+
+    <aside class="sidebar right-panel">
+      <div class="inspector-head"><div class="eyebrow">ANALYSIS</div><h2>Inspector</h2></div>
+      <div class="tabs"><button data-tab="overview" class="active">Overview</button><button data-tab="material">Material</button><button data-tab="tools">Tools</button><button data-tab="views">Views</button></div>
+      <div class="inspector-scroll">
+        <div class="tab-page active" data-page="overview">
+          <div class="section-label">ASSET METRICS <span id="metrics-slot" class="count">A</span></div>
+          <div class="metrics-grid"><div class="metric"><small>TRIANGLES</small><strong id="metric-faces">—</strong></div><div class="metric"><small>VERTICES</small><strong id="metric-vertices">—</strong></div><div class="metric"><small>MESHES</small><strong id="metric-meshes">—</strong></div><div class="metric"><small>MATERIALS</small><strong id="metric-materials">—</strong></div></div>
+          <div class="section-label">DIMENSIONS <span class="count">MODEL UNITS</span></div><div id="metric-dims" class="info-pair">—</div>
+          <div class="section-label">SCENE DETAIL</div><div id="asset-extra" class="info-pair">Load a model to inspect scene nodes, UV channels, texture maps and animation clips.</div>
+          <div class="section-label">ANIMATION <span id="clip-count" class="count">0 clips</span></div>
+          <select id="animation-select" class="full-select"><option value="-1">No animation</option></select>
+          <div class="animation-row"><button id="btn-animation" title="Play/pause">▶ Play</button><button id="btn-animation-reset" title="Stop">■ Stop</button><label>Speed <input id="animation-speed" type="number" value="1" min="0.1" max="4" step="0.1"></label></div>
+          <div id="animation-time" class="helper">0:00 / 0:00</div>
+        </div>
+        <div class="tab-page" data-page="material">
+          <div class="section-label">SELECTED MATERIAL</div><div id="material-empty" class="helper">Select a mesh to inspect and edit its material. Changes are temporary and never alter the source file.</div>
+          <div id="material-editor" class="hidden">
+            <div id="material-title" class="inspector-title"></div>
+            <label class="field">Base color <input id="mat-color" type="color"></label>
+            <label class="field">Metalness <input id="mat-metal" type="range" min="0" max="1" step=".01"><output id="mat-metal-val"></output></label>
+            <label class="field">Roughness <input id="mat-rough" type="range" min="0" max="1" step=".01"><output id="mat-rough-val"></output></label>
+            <label class="field">Opacity <input id="mat-opacity" type="range" min="0" max="1" step=".01"><output id="mat-opacity-val"></output></label>
+            <label class="field">Emissive strength <input id="mat-emissive" type="range" min="0" max="6" step=".1"><output id="mat-emissive-val"></output></label>
+            <label class="toggle"><input id="mat-double" type="checkbox"><span>Double-sided surface</span></label>
+            <button id="btn-reset-material" class="full-btn">↺ Reset selected material</button>
+            <div class="section-label">TEXTURE CHANNELS</div><div id="texture-list" class="texture-list"></div>
+          </div>
+        </div>
+        <div class="tab-page" data-page="tools">
+          <div class="section-label">DISPLAY & DIAGNOSTICS</div>
+          <label class="toggle"><input id="show-grid" type="checkbox" checked><span>Floor grid</span></label>
+          <label class="toggle"><input id="show-axes" type="checkbox"><span>World axes</span></label>
+          <label class="toggle"><input id="show-bounds" type="checkbox"><span>Bounding boxes</span></label>
+          <label class="toggle"><input id="show-skeleton" type="checkbox"><span>Skeleton bones</span></label>
+          <label class="toggle"><input id="auto-rotate" type="checkbox"><span>Turntable rotation</span></label>
+          <label class="toggle"><input id="rotate-light" type="checkbox"><span>Headlight follows camera</span></label>
+          <div class="section-label">LIGHTING</div>
+          <label class="field">Key intensity <input id="light-key" type="range" min="0" max="8" value="3.0" step=".1"><output id="light-key-val">3.0</output></label>
+          <label class="field">Ambient intensity <input id="light-fill" type="range" min="0" max="5" value="1.65" step=".05"><output id="light-fill-val">1.65</output></label>
+          <label class="field">Rim intensity <input id="light-rim" type="range" min="0" max="8" value="3.2" step=".1"><output id="light-rim-val">3.2</output></label>
+          <label class="field">Exposure <input id="exposure" type="range" min=".1" max="3" value="1.0" step=".05"><output id="exposure-val">1.00</output></label>
+          <label class="field">Background <input id="bg-color" type="color" value="#101721"></label>
+          <div class="section-label">SURFACE MEASUREMENT</div>
+          <label class="toggle"><input id="measure-toggle" type="checkbox"><span>Measure point-to-point distance</span></label>
+          <p class="helper">Click two surface points, or hold Shift while clicking. Uses the model's unscaled world units.</p>
+          <div id="measurement-result" class="measurement-result">Pick first point…</div>
+          <button id="btn-clear-measure" class="full-btn">× Clear markers</button>
+          <div class="section-label">COMPARISON</div>
+          <label class="field">Revision overlay opacity <input id="overlay-opacity" type="range" min=".05" max="1" value=".5" step=".05"><output id="overlay-opacity-val">0.50</output></label>
+          <div class="helper">A/B split shares exactly the same camera for matched before-and-after screenshots.</div>
+        </div>
+        <div class="tab-page" data-page="views">
+          <div class="section-label">CAMERA BOOKMARKS</div><div class="helper">Save precise camera angles for repeatable inspections across model revisions. Bookmarks are kept in this browser.</div>
+          <div class="url-row"><input id="bookmark-name" placeholder="e.g. muzzle 3/4 left" maxlength="70"><button id="btn-bookmark">Save</button></div>
+          <div id="bookmark-list" class="bookmark-list"></div>
+          <div class="section-label">SHARING & EXPORT</div>
+          <button id="btn-copy-link" class="full-btn">↗ Copy link to URL-loaded models</button>
+          <button id="btn-export-state" class="full-btn">↧ Export inspection setup (.json)</button>
+          <button id="btn-import-state" class="full-btn">↥ Import inspection setup (.json)</button>
+          <p class="helper">For privacy, local model files cannot be embedded in shared URLs; only remote URLs and inspection settings are referenced.</p>
+          <div class="section-label">KEYBOARD</div><div class="hotkeys">F <span>Frame model / selection</span> 1–6 <span>Orthographic viewpoints</span> P <span>Projection</span> O <span>Open model</span> M <span>Measurement</span> H <span>Hide selection</span> Esc <span>Clear selection</span></div>
+        </div>
+      </div>
+      <div class="inspector-foot">PARALLAX <span>LOCAL-FIRST MODEL ANALYSIS</span></div>
+    </aside>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="model-file" type="file" accept=".glb,.gltf,.obj,.fbx,.stl,.ply,.dae,.mtl,.png,.jpg,.jpeg,.webp,.bin" multiple hidden>
+  <input id="compare-file" type="file" accept=".glb,.gltf,.obj,.fbx,.stl,.ply,.dae,.mtl,.png,.jpg,.jpeg,.webp,.bin" multiple hidden>
+  <input id="folder-file" type="file" webkitdirectory directory multiple hidden>
+  <input id="state-file" type="file" accept=".json" hidden>
+</div>
+</body>
+</html>
