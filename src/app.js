@@ -8,6 +8,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { unzip } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
 
 const $ = id => document.getElementById(id);
 const q = (sel,root=document) => [...root.querySelectorAll(sel)];
@@ -193,15 +194,37 @@ function assetFromGeometry(geometry,name){
   geometry.computeBoundingBox();
   if(!geometry.getAttribute('normal'))geometry.computeVertexNormals();
   const mat=new THREE.MeshStandardMaterial({color:0xb8c7de,roughness:.7,metalness:.1,side:THREE.DoubleSide});
-  if(geometry.hasColors)mat.vertexColors=true;
+  if(geometry.getAttribute('color'))mat.vertexColors=true;
   const mesh=new THREE.Mesh(geometry,mat);mesh.name=name;return mesh;
 }
 const draco=new DRACOLoader();
 draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/');
 function gltfLoader(manager){const loader=new GLTFLoader(manager);loader.setDRACOLoader(draco);return loader;}
 function parseGltf(data,manager){return new Promise((resolve,reject)=>gltfLoader(manager).parse(data,'',resolve,reject));}
+async function expandArchives(files){
+  const source=[...files];
+  const archives=source.filter(f=>fileExt(f.name)==='zip');
+  if(!archives.length)return source;
+  const expanded=source.filter(f=>fileExt(f.name)!=='zip');
+  for(const zip of archives){
+    if(zip.size>500*1024*1024)throw Error('ZIP above 500 MB: extract it locally first.');
+    const bytes=new Uint8Array(await zip.arrayBuffer());
+    const entries=await new Promise((resolve,reject)=>unzip(bytes,{
+      filter:entry=>!/(__MACOSX|\/\.)/i.test(entry.name)&&/\.(glb|gltf|obj|fbx|stl|ply|dae|mtl|png|jpg|jpeg|webp|bin|tga|bmp)$/i.test(entry.name)
+    },(err,files)=>err?reject(err):resolve(files)));
+    for(const [path,data] of Object.entries(entries)){
+      const name=path.split('/').pop();if(!name)continue;
+      const f=new File([data],name);
+      Object.defineProperty(f,'webkitRelativePath',{value:path});
+      expanded.push(f);
+    }
+  }
+  return expanded;
+}
 async function parseFiles(files,key){
-  const source=[...files].find(f=>supported.includes(fileExt(f.name)));
+  files=await expandArchives(files);
+  const priority=['glb','gltf','obj','fbx','dae','ply','stl'];
+  const source=priority.map(ext=>[...files].find(f=>fileExt(f.name)===ext)).find(Boolean);
   if(!source)throw Error('No supported model found. Choose GLB, GLTF, OBJ, FBX, STL, PLY or DAE.');
   const ext=fileExt(source.name), manager=makeManager(files);
   let obj,clips=[];
@@ -551,7 +574,7 @@ function bindUI(){
   $('btn-hide-selected').onclick=()=>{if(selected){selected.visible=!selected.visible;refreshTree();}};
   $('btn-isolate').onclick=()=>{
     const slot=slots[selectedSlot];if(!slot||!selected)return;
-    slot.obj.traverse(o=>{if(o.isMesh)o.visible=o===selected||selected===o.parent;});refreshTree();
+    slot.obj.traverse(o=>{if(!o.isMesh)return;let current=o;while(current&&current!==selected)current=current.parent;o.visible=current===selected;});refreshTree();
   };
   $('btn-show-all').onclick=()=>{for(const key of ['A','B'])slots[key]?.obj.traverse(o=>o.visible=true);refreshTree();};
   $('animation-select').onchange=e=>chooseAnimation(+e.target.value);
