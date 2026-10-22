@@ -16,6 +16,7 @@ try{
   await page.waitForFunction(()=>document.querySelector('#metric-faces')?.textContent!=='—',{timeout:55000});
   const demo=await page.locator('#metric-faces').innerText();
   assert(Number(demo.replaceAll(',',''))>0,'Demo geometry must have triangles');
+  writeFileSync('smoke-workspace.png',await page.screenshot({fullPage:true}));
   const canvas=page.locator('#viewport-canvas'),area=await canvas.boundingBox();
   assert(area&&area.width>300&&area.height>250,'Viewport must be visible');
 
