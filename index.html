@@ -60,6 +60,7 @@
           <button class="icon-button" id="btn-frame" title="Frame entire model (F)">⌗</button>
           <button class="icon-button" id="btn-reset" title="Reset camera">↺</button>
           <button class="pill-button" id="btn-projection" title="Perspective / orthographic (P)">PERSPECTIVE ▾</button>
+          <label class="input-picker" title="Mouse and touchpad scroll events can be indistinguishable in browsers">INPUT <select id="input-device" aria-label="Input device"><option value="auto">Auto detect</option><option value="touchpad">Touchpad</option><option value="mouse">Mouse</option></select></label>
           <select id="render-mode" class="toolbar-select" aria-label="Render mode"><option value="material">Material</option><option value="clay">Clay</option><option value="normal">Normals</option><option value="wire">Wireframe</option><option value="uv">UV checker</option></select>
         </div>
         <div class="toolbar-cluster">
@@ -76,7 +77,7 @@
         <div id="drop-overlay" class="drop-overlay hidden"><strong>Drop 3D asset here</strong><span>ZIP · GLB · GLTF · OBJ · FBX · STL · PLY · DAE</span></div>
         <div class="view-presets"><button data-view="front" title="Front (1)">FRONT</button><button data-view="back" title="Back (2)">BACK</button><button data-view="left" title="Left (3)">LEFT</button><button data-view="right" title="Right (4)">RIGHT</button><button data-view="top" title="Top (5)">TOP</button><button data-view="bottom" title="Bottom (6)">BOTTOM</button></div>
         <div class="viewport-bottom">
-          <div class="mouse-hints"><span><b class="mouse-symbol">L</b> Pan</span><span><b class="mouse-symbol">R</b> Orbit</span><span><b class="mouse-symbol">↕</b> Zoom</span><span><b class="mouse-symbol">⇧</b> Measure</span></div>
+          <div class="mouse-hints"><span><b class="mouse-symbol">L</b> Pan</span><span><b class="mouse-symbol">R</b> Vertical tilt</span><span><b class="mouse-symbol">2F</b> Orbit</span><span><b class="mouse-symbol">⊕</b> Pinch / wheel zoom</span></div>
           <div class="performance"><span id="fps">-- FPS</span><span id="drawcalls">-- calls</span><span id="triangles">-- tris</span></div>
         </div>
       </div>
@@ -112,6 +113,12 @@
           </div>
         </div>
         <div class="tab-page" data-page="tools">
+          <div class="section-label">CAMERA INPUT</div>
+          <p class="helper">Left-click / trackpad press + drag: pan. Right-drag: vertical camera tilt only. Two-finger touchpad swipe: orbit horizontally and vertically. Pinch: zoom. A physical mouse wheel zooms.</p>
+          <label class="field">Two-finger orbit sensitivity <input id="trackpad-sensitivity" type="range" min=".001" max=".014" value=".005" step=".0005"><output id="trackpad-sensitivity-val">0.0050</output></label>
+          <label class="toggle"><input id="invert-trackpad-x" type="checkbox"><span>Reverse horizontal orbit</span></label>
+          <label class="toggle"><input id="invert-trackpad-y" type="checkbox"><span>Reverse vertical orbit</span></label>
+          <p class="helper">Chrome exposes two-finger scrolling and mouse-wheel scrolling as similar events. Auto detection is best-effort; choose <b>Touchpad</b> in the viewport toolbar if a gesture gets mistaken for zoom. Physical clicks and touchpad clicks are also reported as the same primary mouse button.</p>
           <div class="section-label">DISPLAY & DIAGNOSTICS</div>
           <label class="toggle"><input id="show-grid" type="checkbox" checked><span>Floor grid</span></label>
           <label class="toggle"><input id="show-axes" type="checkbox"><span>World axes</span></label>
