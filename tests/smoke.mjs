@@ -20,20 +20,78 @@ try{
   const canvas=page.locator('#viewport-canvas'),area=await canvas.boundingBox();
   assert(area&&area.width>300&&area.height>250,'Viewport must be visible');
 
-  const before=await canvas.screenshot();
-  await page.mouse.move(area.x+area.width*.55,area.y+area.height*.55);
+  const camera=()=>page.locator('#viewport-canvas').evaluate(el=>({
+    yaw:+el.dataset.cameraYaw,pitch:+el.dataset.cameraPitch,
+    distance:+el.dataset.cameraDistance,target:el.dataset.cameraTarget.split(',').map(Number)
+  }));
+  const initial=await camera();
+  // Right-click drag is specifically vertical TILT ONLY, never full orbit.
+  await page.mouse.move(area.x+area.width*.5,area.y+area.height*.55);
   await page.mouse.down({button:'right'});
-  await page.mouse.move(area.x+area.width*.73,area.y+area.height*.63,{steps:8});
+  await page.mouse.move(area.x+area.width*.7,area.y+area.height*.55,{steps:8});
   await page.mouse.up({button:'right'});
-  const afterOrbit=await canvas.screenshot();
-  assert(!before.equals(afterOrbit),'Right-drag must visibly orbit camera');
+  const afterRightHorizontal=await camera();
+  assert.equal(afterRightHorizontal.yaw,initial.yaw,'Right horizontal drag must NOT orbit horizontally');
+  assert.equal(afterRightHorizontal.pitch,initial.pitch,'Right horizontal drag must NOT tilt');
+  await page.mouse.move(area.x+area.width*.5,area.y+area.height*.5);
+  await page.mouse.down({button:'right'});
+  await page.mouse.move(area.x+area.width*.5,area.y+area.height*.65,{steps:8});
+  await page.mouse.up({button:'right'});
+  const afterRightVertical=await camera();
+  assert.equal(afterRightVertical.yaw,initial.yaw,'Right vertical drag must not change yaw');
+  assert.notEqual(afterRightVertical.pitch,initial.pitch,'Right vertical drag must tilt camera');
 
+  // Left-click drag translates the CAMERA TARGET, preserving both orientation axes.
   await page.mouse.move(area.x+area.width*.5,area.y+area.height*.45);
   await page.mouse.down({button:'left'});
   await page.mouse.move(area.x+area.width*.62,area.y+area.height*.55,{steps:8});
   await page.mouse.up({button:'left'});
-  const afterPan=await canvas.screenshot();
-  assert(!afterOrbit.equals(afterPan),'Left-drag must visibly pan camera');
+  const afterPan=await camera();
+  assert.deepEqual([afterPan.yaw,afterPan.pitch],[afterRightVertical.yaw,afterRightVertical.pitch],'Left drag must not rotate');
+  assert.notDeepEqual(afterPan.target,afterRightVertical.target,'Left-drag must pan the camera target');
+
+  // Chromium exposes precision touchpad swipes as wheel events, not touch pointers.
+  await page.locator('#input-device').selectOption('touchpad');
+  const beforeOrbit=await camera();
+  await page.locator('#viewport-canvas').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaMode:0,deltaX:42,deltaY:36}));
+  });
+  await page.waitForTimeout(100);
+  const afterOrbit=await camera();
+  assert.notEqual(afterOrbit.yaw,beforeOrbit.yaw,'Two-finger horizontal delta must orbit yaw');
+  assert.notEqual(afterOrbit.pitch,beforeOrbit.pitch,'Two-finger vertical delta must orbit pitch');
+  assert.equal(afterOrbit.distance,beforeOrbit.distance,'Two-finger orbit must not zoom');
+
+  // Trackpad pinch produces Ctrl+wheel events; wheel events with the mouse profile zoom.
+  await page.locator('#viewport-canvas').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,ctrlKey:true,deltaY:-15}));
+  });
+  await page.waitForTimeout(100);
+  const afterPinch=await camera();
+  assert.notEqual(afterPinch.distance,afterOrbit.distance,'Touchpad pinch must zoom');
+  await page.locator('#input-device').selectOption('mouse');
+  await page.locator('#viewport-canvas').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:120}));
+  });
+  await page.waitForTimeout(100);
+  const afterWheel=await camera();
+  assert.notEqual(afterWheel.distance,afterPinch.distance,'Physical mouse wheel must zoom');
+
+  // Auto-detection: fine pixel deltas imply touchpad; coarse mouse ticks imply zoom.
+  await page.locator('#input-device').selectOption('auto');
+  await page.locator('#viewport-canvas').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:7,deltaX:0}));
+  });
+  await page.waitForTimeout(100);
+  const afterAutoTouchpad=await camera();
+  assert.notEqual(afterAutoTouchpad.pitch,afterWheel.pitch,'Fine auto input should orbit');
+  await page.locator('#viewport-canvas').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaMode:1,deltaY:3}));
+  });
+  await page.waitForTimeout(100);
+  const afterAutoMouse=await camera();
+  assert.notEqual(afterAutoMouse.distance,afterAutoTouchpad.distance,'Coarse auto input should zoom');
+  assert.equal(afterAutoMouse.pitch,afterAutoTouchpad.pitch,'Mouse wheel must not orbit');
 
   const obj1='o Smoke_A\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n';
   const obj2='o Smoke_B\nv 0 0 0\nv 1 0 0\nv 0 1.5 0\nf 1 2 3\n';
@@ -74,5 +132,5 @@ try{
 
   assert.equal(errors.length,0,'No browser script exceptions: '+errors.join(' // '));
   writeFileSync('smoke-preview.png',await canvas.screenshot());
-  console.log('PASS: WebGL, left-pan/right-orbit, OBJ/GLB/ZIP imports, split/overlay, orthographic and shading.');
+  console.log('PASS: WebGL, left pan, right vertical tilt ONLY, touchpad 2-finger XY orbit and pinch, mouse wheel, auto-detection, OBJ/GLB/ZIP imports, split/overlay, orthographic and shading.');
 }finally{await browser.close();}
