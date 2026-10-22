@@ -130,6 +130,10 @@
           <p class="helper">Click two surface points, or hold Shift while clicking. Uses the model's unscaled world units.</p>
           <div id="measurement-result" class="measurement-result">Pick first point…</div>
           <button id="btn-clear-measure" class="full-btn">× Clear markers</button>
+          <div class="section-label">COMPARISON ALIGNMENT</div>
+          <select id="alignment-mode" class="full-select" aria-label="Comparison alignment"><option value="center">Align bounding centers</option><option value="ground">Align ground contact (feet)</option><option value="origin">Preserve original coordinates</option></select>
+          <div class="alignment-grid"><label>Rev ΔX<input id="offset-b-x" type="number" step=".01" value="0"></label><label>Rev ΔY<input id="offset-b-y" type="number" step=".01" value="0"></label><label>Rev ΔZ<input id="offset-b-z" type="number" step=".01" value="0"></label></div>
+          <p class="helper">Optional manual offset moves only B. Alignment never modifies the source mesh.</p>
           <div class="section-label">COMPARISON</div>
           <label class="field">Revision overlay opacity <input id="overlay-opacity" type="range" min=".05" max="1" value=".5" step=".05"><output id="overlay-opacity-val">0.50</output></label>
           <div class="helper">A/B split shares exactly the same camera for matched before-and-after screenshots.</div>
